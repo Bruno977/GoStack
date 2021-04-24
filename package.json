@@ -5,11 +5,18 @@
   "repository": "https://github.com/Bruno977/GoStack",
   "author": "Bruno <bruno_151997@hotmail.com>",
   "license": "MIT",
+  "scripts": {
+    "dev": "nodemon src/server.js"
+  },
   "dependencies": {
-    "express": "^4.17.1"
+    "express": "^4.17.1",
+    "pg": "^8.6.0",
+    "pg-hstore": "^2.3.3",
+    "sequelize": "^6.6.2"
   },
   "devDependencies": {
     "nodemon": "^2.0.7",
+    "sequelize-cli": "^6.2.0",
     "sucrase": "^3.18.1"
   }
 }
