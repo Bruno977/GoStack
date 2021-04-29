@@ -6,7 +6,8 @@
   "author": "Bruno <bruno_151997@hotmail.com>",
   "license": "MIT",
   "scripts": {
-    "dev": "nodemon src/server.js"
+    "dev": "nodemon src/server.js",
+    "queue": "nodemon src/queue.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
