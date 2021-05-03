@@ -1,12 +1,11 @@
+import * as Yup from "yup";
 import { startOfHour, parseISO, isBefore, format, subHours } from "date-fns";
 import pt from "date-fns/locale/pt";
-import * as Yup from "yup";
-
-import User from "../models/User";
-import Appointment from "../models/Appointment";
-import File from "../models/File";
+import User from "./../models/User";
+import File from "./../models/File";
+import Appointment from "./../models/Appointment";
 import Notification from "../schemas/Notification";
-
+import Mail from "../../lib/Mail";
 import CancellationMail from "../jobs/CancellationMail";
 import Queue from "../../lib/Queue";
 
@@ -46,7 +45,7 @@ class AppointmentController {
     });
 
     if (!(await schema.isValid(req.body))) {
-      return res.status(400).json({ error: "Validation fails" });
+      return res.status(400).json({ error: "Erro de validação" });
     }
 
     const { provider_id, date } = req.body;
@@ -56,28 +55,20 @@ class AppointmentController {
     });
 
     if (!isProvider) {
-      return res
-        .status(401)
-        .json({ error: "You can only create appointments with providers" });
+      return res.status(401).json({ error: "Acesso restrito" });
     }
-
-    /**
-     * Check for past dates
-     */
 
     const hourStart = startOfHour(parseISO(date));
 
+    //checando se a data é no passado
     if (isBefore(hourStart, new Date())) {
-      return res.status(400).json({ error: "Past dates are not  permitted" });
+      return res.status(400).json({ error: "Data inválida para agendamento!" });
     }
 
-    /**
-     * Check date availability
-     */
-
+    //chegado se tem disponibilidade pra agendamento
     const checkAvailability = await Appointment.findOne({
       where: {
-        provider_id,
+        provider_id: provider_id,
         canceled_at: null,
         date: hourStart,
       },
@@ -86,7 +77,7 @@ class AppointmentController {
     if (checkAvailability) {
       return res
         .status(400)
-        .json({ error: "Appointment date is not available" });
+        .json({ error: "Sem vagas para essa data, marque outra" });
     }
 
     const appointment = await Appointment.create({
@@ -95,15 +86,15 @@ class AppointmentController {
       date,
     });
 
-    /**
-     * Notify appointment provider
-     */
+    //Notifica o prestador de serviço
 
     const user = await User.findByPk(req.userId);
     const formattedDate = format(
       hourStart,
-      "'dia' dd 'de' MMMM', às' H:mm'h'",
-      { locale: pt }
+      "'dia' dd 'de' MMMM', às' HH:mm'h'",
+      {
+        locale: pt,
+      }
     );
 
     await Notification.create({
@@ -113,6 +104,7 @@ class AppointmentController {
 
     return res.json(appointment);
   }
+
   async delete(req, res) {
     const appointment = await Appointment.findByPk(req.params.id, {
       include: [
@@ -121,6 +113,7 @@ class AppointmentController {
           as: "provider",
           attributes: ["name", "email"],
         },
+
         {
           model: User,
           as: "user",
@@ -129,28 +122,40 @@ class AppointmentController {
       ],
     });
 
-    if (appointment.user_id !== req.userId) {
-      return res.status(401).json({
-        error: "You don't have permission to cancel this appointment",
-      });
+    if (appointment.user_id != req.userId) {
+      return res.status(401).json({ error: "Você não tem permissão" });
     }
 
     const dateWithSub = subHours(appointment.date, 2);
 
     if (isBefore(dateWithSub, new Date())) {
-      return res.status(401).json({
-        error: "You can only cancel appointments 2 hours in advance",
-      });
+      return res
+        .status(401)
+        .json({
+          error: "Você não pode cancelar o agendamento a menos de 2 horas.",
+        });
     }
 
     appointment.canceled_at = new Date();
 
     await appointment.save();
 
-    await Queue.add(CancellationMail.Key, {
-      appointment,
+    await Mail.sendMail({
+      to: `${appointment.provider.name} <${appointment.provider.email}>`,
+      subject: "Agendamento Cancelado!",
+      template: "cancellation",
+      context: {
+        provider: appointment.provider.name,
+        user: appointment.user.name,
+        date: format(appointment.date, "'dia' dd 'de' MMMM', às' HH:mm'h'", {
+          locale: pt,
+        }),
+      },
     });
 
+    await Queue.add(CancellationMail.key, {
+      appointment,
+    });
     return res.json(appointment);
   }
 }
