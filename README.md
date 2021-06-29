@@ -1,1 +1,1 @@
-# GoStack
+# GoStack bootcamp
